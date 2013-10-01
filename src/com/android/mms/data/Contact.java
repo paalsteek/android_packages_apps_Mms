@@ -333,8 +333,8 @@ public class Contact {
         return mContactMethodId;
     }
 
-    public synchronized Uri getPhoneUri(boolean forceTelUri) {
-        if (existsInDatabase() && !forceTelUri) {
+    public synchronized Uri getPhoneUri() {
+        if (existsInDatabase()) {
             return ContentUris.withAppendedId(Phone.CONTENT_URI, mContactMethodId);
         } else {
             Uri.Builder ub = new Uri.Builder();

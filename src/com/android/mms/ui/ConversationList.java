@@ -51,16 +51,27 @@ import android.util.Log;
 import android.view.ActionMode;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
+// Engle, 添加手势开始
+import android.view.GestureDetector;
+import android.view.GestureDetector.SimpleOnGestureListener;
+// Engle, 添加手势结束
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+// Engle, 添加手势开始
+import android.view.MotionEvent;
+// Engle, 添加手势结束
 import android.view.View;
 import android.view.View.OnCreateContextMenuListener;
 import android.view.View.OnKeyListener;
 import android.view.ViewGroup;
+import android.view.animation.Animation;
+import android.view.animation.Animation.AnimationListener;
+import android.view.animation.TranslateAnimation;
+// Engle, 添加手势结束
 import android.widget.AdapterView;
 import android.widget.CheckBox;
 import android.widget.ListView;
@@ -120,6 +131,134 @@ public class ConversationList extends ListActivity implements DraftCache.OnDraft
 
     static private final String CHECKED_MESSAGE_LIMITS = "checked_message_limits";
 
+    // Engle, 添加手势, 开始
+
+    private GestureDetector mGestureDetector;
+    private View.OnTouchListener mGestureListener;
+    private GestureDetectorQueryHandler mGestureDetectorQueryHandler;
+
+    private class GestureDetectorQueryHandler extends ConversationQueryHandler {
+        public GestureDetectorQueryHandler(ContentResolver contentResolver) {
+            super(contentResolver);
+        }
+
+        @Override
+        protected void onQueryComplete(int token, Object cookie, Cursor cursor) {
+            if (HAVE_LOCKED_MESSAGES_TOKEN == token) {
+                @SuppressWarnings("unchecked")
+                Collection<Long> threadIds = (Collection<Long>) cookie;
+                Conversation.startDelete(mQueryHandler, DELETE_CONVERSATION_TOKEN, true, threadIds);
+                if (cursor != null) {
+                    cursor.close();
+                }
+            } else {
+                mQueryHandler.onQueryComplete(token, cookie, cursor);
+            }
+        }
+
+        @Override
+        protected void onDeleteComplete(int token, Object cookie, int result) {
+            mQueryHandler.onDeleteComplete(token, cookie, result);
+        }
+    }
+
+    private class SwlipAnimationListener implements AnimationListener {
+        private Context mContext;
+        private int mPosition;
+        public SwlipAnimationListener(Context context, int position) {
+            mContext = context;
+        }
+
+        public void onAnimationStart(Animation animation) {
+        }
+
+        public void onAnimationRepeat(Animation animation) {
+        }
+
+        public void onAnimationEnd(Animation animation) {
+            animation.cancel();
+            Cursor cursor = (Cursor) getListView().getItemAtPosition(mPosition);
+            if (cursor != null) {
+                Conversation conv = Conversation.from(mContext, cursor);
+                long tid = conv.getThreadId();
+                confirmDeleteThread(tid, mGestureDetectorQueryHandler);
+                cursor.close();
+            }
+        }
+    }
+
+    private class ChangeGestureDetector extends SimpleOnGestureListener {
+        private Context mContext;
+        private static final int SWIPE_MIN_DISTANCE = 120;
+        private static final int SWIPE_MAX_OFF_PATH = 250;
+        private static final int SWIPE_THRESHOLD_VELOCITY = 200;
+        private static final int DELETE_ANITMATION_DURATION = 800;
+
+        public ChangeGestureDetector(Context context) {
+            mContext = context;
+        }
+
+        private void removeListItem(final int position, boolean isLeft) {
+            View rowView = getListView().getChildAt(position);
+            if (null == rowView) {
+                return;
+            }
+            int endX = isLeft ? -rowView.getWidth() : rowView.getWidth();
+            TranslateAnimation swipeAnim = new TranslateAnimation(0, endX, 0, 0);
+            swipeAnim.setDuration(DELETE_ANITMATION_DURATION);
+            swipeAnim.setAnimationListener(new SwlipAnimationListener(mContext, position));
+            rowView.startAnimation(swipeAnim);
+        }
+
+        @Override
+        public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX,
+                float velocityY) {
+            int hDistance = (int) Math.abs(e1.getY() - e2.getY());
+            if (hDistance > SWIPE_MAX_OFF_PATH) {
+                Log.d(TAG, "The fling distance is too large " + hDistance);
+                return false;
+            }
+            int position = getListView().pointToPosition((int) e1.getX(),
+                    (int) (e1.getY() + e2.getY()) / 2);
+            if (ListView.INVALID_POSITION != position) {
+                // right to left swipe
+                if (e1.getX() - e2.getX() > SWIPE_MIN_DISTANCE
+                        && Math.abs(velocityX) > SWIPE_THRESHOLD_VELOCITY) {
+                    Log.d(TAG, "Fling left: selected item pos is " + position);
+                    removeListItem(position, true);
+                    return true;
+                } else if (e2.getX() - e1.getX() > SWIPE_MIN_DISTANCE
+                        && Math.abs(velocityX) > SWIPE_THRESHOLD_VELOCITY) {
+                    Log.d(TAG, "Fling right: selected item pos is " + position);
+                    removeListItem(position, false);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    void initGestureDetector() {
+        mGestureDetector = new GestureDetector(this, new ChangeGestureDetector(this));
+        mGestureListener = new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                if (mGestureDetector.onTouchEvent(event)) {
+                    MotionEvent cancelEvent = MotionEvent.obtain(event);
+                    cancelEvent.setAction(MotionEvent.ACTION_CANCEL);
+                    v.onTouchEvent(cancelEvent);
+                    return true;
+                }
+                return false;
+            }
+        };
+        mGestureDetectorQueryHandler = new GestureDetectorQueryHandler(getContentResolver());
+        getListView().setOnTouchListener(mGestureListener);
+    }
+
+    // Engle, 添加手势, 结束
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -159,6 +298,10 @@ public class ConversationList extends ListActivity implements DraftCache.OnDraft
             mSavedFirstVisiblePosition = AdapterView.INVALID_POSITION;
             mSavedFirstItemOffset = 0;
         }
+
+        // Engle, 添加手势, 开始
+        initGestureDetector();
+        // Engle, 添加手势, 结束
     }
 
     @Override

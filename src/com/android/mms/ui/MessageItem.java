@@ -111,6 +111,17 @@ public class MessageItem {
     boolean mFullTimestamp;
     boolean mSentTimestamp;
 
+    // Engle, 添加延迟发送
+    int mCountDown = 0;
+
+    public int getCountDown() {
+        return mCountDown;
+    }
+
+    public void setCountDown(int countDown) {
+        this.mCountDown = countDown;
+    }
+
     MessageItem(Context context, String type, final Cursor cursor,
             final ColumnsMap columnsMap, Pattern highlight, boolean fullTimestamp, boolean sentTimestamp) throws MmsException {
         mContext = context;
