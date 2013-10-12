@@ -167,6 +167,7 @@ public class ConversationList extends ListActivity implements DraftCache.OnDraft
         private int mPosition;
         public SwlipAnimationListener(Context context, int position) {
             mContext = context;
+            mPosition = position;
         }
 
         public void onAnimationStart(Animation animation) {
@@ -182,7 +183,6 @@ public class ConversationList extends ListActivity implements DraftCache.OnDraft
                 Conversation conv = Conversation.from(mContext, cursor);
                 long tid = conv.getThreadId();
                 confirmDeleteThread(tid, mGestureDetectorQueryHandler);
-                cursor.close();
             }
         }
     }
@@ -218,20 +218,23 @@ public class ConversationList extends ListActivity implements DraftCache.OnDraft
                 Log.d(TAG, "The fling distance is too large " + hDistance);
                 return false;
             }
-            int position = getListView().pointToPosition((int) e1.getX(),
-                    (int) (e1.getY() + e2.getY()) / 2);
+            int position = getListView().pointToPosition((int) (e1.getX() + e2.getX()) >> 1,
+                    (int) (e1.getY() + e2.getY()) >> 1);
             if (ListView.INVALID_POSITION != position) {
                 // right to left swipe
-                if (e1.getX() - e2.getX() > SWIPE_MIN_DISTANCE
-                        && Math.abs(velocityX) > SWIPE_THRESHOLD_VELOCITY) {
-                    Log.d(TAG, "Fling left: selected item pos is " + position);
-                    removeListItem(position, true);
-                    return true;
-                } else if (e2.getX() - e1.getX() > SWIPE_MIN_DISTANCE
-                        && Math.abs(velocityX) > SWIPE_THRESHOLD_VELOCITY) {
-                    Log.d(TAG, "Fling right: selected item pos is " + position);
-                    removeListItem(position, false);
-                    return true;
+                Cursor cursor = (Cursor) getListView().getItemAtPosition(position);
+                if (cursor != null) {
+                    if (e1.getX() - e2.getX() > SWIPE_MIN_DISTANCE
+                            && Math.abs(velocityX) > SWIPE_THRESHOLD_VELOCITY) {
+                        Log.d(TAG, "Fling left: selected item pos is " + position);
+                        removeListItem(position, true);
+                        return true;
+                    } else if (e2.getX() - e1.getX() > SWIPE_MIN_DISTANCE
+                            && Math.abs(velocityX) > SWIPE_THRESHOLD_VELOCITY) {
+                        Log.d(TAG, "Fling right: selected item pos is " + position);
+                        removeListItem(position, false);
+                        return true;
+                    }
                 }
             }
 
